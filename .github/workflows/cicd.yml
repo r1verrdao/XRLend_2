@@ -11,9 +11,7 @@ on:
       - main
 
 jobs:
-  # =========================================================================
   # 1. CI STAGE: Automated Backend Testing & Code Validation
-  # =========================================================================
   test-backend:
     name: Backend Tests (Mocha/Chai)
     runs-on: ubuntu-latest
@@ -35,9 +33,7 @@ jobs:
       - name: Execute Backend Tests
         run: npm test
 
-  # =========================================================================
   # 2. CI STAGE: Automated Frontend Production Build Check
-  # =========================================================================
   build-frontend:
     name: Frontend Build Check (React)
     runs-on: ubuntu-latest
@@ -59,9 +55,7 @@ jobs:
       - name: Build React Application
         run: npm run build
 
-  # =========================================================================
   # 3. CD STAGE: Continuous Deployment to AWS EC2 via Self-Hosted Runner
-  # =========================================================================
   deploy-to-ec2:
     name: Deploy to Production (EC2)
     needs: [test-backend, build-frontend]
