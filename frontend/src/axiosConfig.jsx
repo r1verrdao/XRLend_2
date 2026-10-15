@@ -1,8 +1,15 @@
 import axios from 'axios';
 
+const getBaseURL = () => {
+  if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL;
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return `http://${window.location.hostname}:5001`;
+  }
+  return 'http://localhost:5001';
+};
+
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:5001', // local
-  // baseURL: 'http://16.176.15.125:5001', // public IP of cloud VPS, edit later when deploying
+  baseURL: getBaseURL(),
   headers: { 'Content-Type': 'application/json' },
 });
 
