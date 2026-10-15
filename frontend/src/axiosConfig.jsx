@@ -1,9 +1,18 @@
 import axios from 'axios';
 
-const axiosInstance = axios.create({
+const getBaseURL = () => {
+  if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL;
+  if (process.env.NODE_ENV === 'development') return 'http://localhost:5001';
+  // If accessing directly on port 3000 (PM2 serve), route to backend port 5001
+  if (typeof window !== 'undefined' && window.location.port === '3000') {
+    return `http://${window.location.hostname}:5001`;
+  }
+  // Same address as the page also works through the load balancer
+  return '';
+};
 
-  // same address as the page also works through the load balancer.
-  baseURL: process.env.NODE_ENV === 'development' ? 'http://localhost:5001' : '',
+const axiosInstance = axios.create({
+  baseURL: getBaseURL(),
   headers: { 'Content-Type': 'application/json' },
 });
 
