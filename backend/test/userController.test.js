@@ -28,6 +28,12 @@ describe("GetUsers Function Test", () => {
       email: "student1@qut.edu.au",
       role: "student",
     },
+    {
+      _id: "u3",
+      name: "Admin User",
+      email: "admin@qut.edu.au",
+      role: "admin",
+    },
   ];
 
   beforeEach(() => {
@@ -42,7 +48,7 @@ describe("GetUsers Function Test", () => {
       sort: sinon.stub().returnsThis(),
       lean: sinon.stub().resolves(users), // enforce mongodb to return mock data
     };
-    sinon.stub(User, "find").returns(chain);
+    sinon.stub(User, "find").returns(chain); // simulate the query to mongodb to return the mock data
   });
 
   afterEach(() => {
@@ -50,10 +56,12 @@ describe("GetUsers Function Test", () => {
   });
 
   it("should return all users except admins", async () => {
+    const expectedResult = users.filter((user) => user.role !== "admin");
+    chain.lean.resolves(expectedResult); // enforce mongodb to return users that are not admin
     await getUsers(req, res);
 
     expect(User.find.calledOnceWith({ role: { $ne: "admin" } })).to.be.true;
-    expect(res.json.calledWith(users)).to.be.true;
+    expect(res.json.calledWith(expectedResult)).to.be.true;
     expect(res.status.called).to.be.false;
   });
 
@@ -61,6 +69,8 @@ describe("GetUsers Function Test", () => {
     await getUsers(req, res);
 
     expect(chain.select.calledOnceWith("name email role")).to.be.true;
+    expect(res.json.calledWith(users)).to.be.true;
+    expect(res.status.called).to.be.false;
   });
 
   it("should return an empty list when there are no users", async () => {
@@ -73,25 +83,42 @@ describe("GetUsers Function Test", () => {
   });
 
   it("should sort users by role (technician first, student later), then by name", async () => {
+    const expectedResult = [...users].sort((a, b) => {
+      if (a.role !== b.role) {
+        return b.role.localeCompare(a.role);
+      }
+      return a.name.localeCompare(b.name);
+    });
+    chain.lean.resolves(expectedResult);
     await getUsers(req, res);
 
     expect(chain.sort.calledOnceWith({ role: -1, name: 1 })).to.be.true;
+    expect(res.json.calledWith(expectedResult)).to.be.true;
+    expect(res.status.called).to.be.false;
   });
 
   it("should only return students when the query role is student", async () => {
     req.query.role = "student";
+    const expectedResult = users.filter((user) => user.role === "student");
+    chain.lean.resolves(expectedResult); // enforce mongodb to return only students
 
     await getUsers(req, res);
 
     expect(User.find.calledOnceWith({ role: "student" })).to.be.true;
+    expect(res.json.calledWith(expectedResult)).to.be.true;
+    expect(res.status.called).to.be.false;
   });
 
   it("should only return technicians when the query role is technician", async () => {
     req.query.role = "technician";
+    const expectedResult = users.filter((user) => user.role === "technician");
+    chain.lean.resolves(expectedResult); // enforce mongodb to return only technicians
 
     await getUsers(req, res);
 
     expect(User.find.calledOnceWith({ role: "technician" })).to.be.true;
+    expect(res.json.calledWith(expectedResult)).to.be.true;
+    expect(res.status.called).to.be.false;
   });
 
   it("should return 400 when the query role is admin", async () => {
@@ -140,25 +167,18 @@ describe("CreateUser Function Test", () => {
   });
 
   it("should create a student and return the details without a password or token", async () => {
-    sinon.stub(User, "findOne").resolves(null);
-    const createStub = sinon.stub(User, "create").resolves({
+    const findStub = sinon.stub(User, "findOne").resolves(null); // stub User.findOne to return null -> no duplicate email
+    const createdUser = {
       id: "u1",
-      name: "New Student",
-      email: "new.student@qut.edu.au",
-      role: "student",
+      ...req.body,
       password: "hashed",
-    });
+    };
+    const createStub = sinon.stub(User, "create").resolves(createdUser);
 
     await createUser(req, res);
 
-    expect(
-      createStub.calledOnceWith({
-        name: "New Student",
-        email: "new.student@qut.edu.au",
-        password: "password123",
-        role: "student",
-      }),
-    ).to.be.true;
+    expect(findStub.calledOnceWith({ email: req.body.email })).to.be.true; // ensure there is a check for existing email
+    expect(createStub.calledOnceWith(req.body)).to.be.true;
     expect(res.status.calledWith(201)).to.be.true;
     expect(
       res.json.calledWith({
@@ -186,19 +206,21 @@ describe("CreateUser Function Test", () => {
   });
 
   it("should return 400 when the email is already used", async () => {
-    sinon.stub(User, "findOne").resolves({ _id: "u9" });
+    const findStub = sinon
+      .stub(User, "findOne")
+      .resolves({ id: "u9", email: req.body.email });
     const createStub = sinon.stub(User, "create");
 
     await createUser(req, res);
 
+    expect(findStub.calledOnceWith({ email: req.body.email })).to.be.true;
     expect(res.status.calledWith(400)).to.be.true;
     expect(res.json.calledWith({ message: "User already exists" })).to.be.true;
     expect(createStub.called).to.be.false;
   });
 
   it("should return 500 if an error occurs (e.g. DB Error)", async () => {
-    sinon.stub(User, "findOne").resolves(null);
-    sinon.stub(User, "create").rejects(new Error("DB Error"));
+    sinon.stub(User, "findOne").rejects(new Error("DB Error"));
 
     await createUser(req, res);
 
@@ -235,10 +257,10 @@ describe("DeleteUser Function Test", () => {
     expect(res.status.called).to.be.false;
   });
 
-  it("should answer with the status of the error the facade throws", async () => {
+  it("should return the status of the error thrown by the facade", async () => {
     const notFound = Object.assign(new Error("That user does not exist"), {
       status: 404,
-    });
+    }); // error object that contains status code
     sinon.stub(UserAccountFacade.prototype, "deleteAccount").rejects(notFound);
 
     await deleteUser(req, res);
@@ -263,7 +285,7 @@ describe("DeleteUser Function Test", () => {
 describe("UserAccountFacade deleteAccount Test", () => {
   const facade = new UserAccountFacade();
   const id = new mongoose.Types.ObjectId().toString();
-  let user, existsStub, deleteLoansStub;
+  let user, headsetOutStub, deleteLoansStub;
 
   // Runs deleteAccount and hands back the error it threw, or undefined if it worked
   const attempt = async (userId = id) => {
@@ -280,8 +302,8 @@ describe("UserAccountFacade deleteAccount Test", () => {
       role: "student",
       deleteOne: sinon.stub().resolves(),
     };
-    sinon.stub(User, "findById").resolves(user);
-    existsStub = sinon.stub(Loan, "exists").resolves(null);
+    findByIdStub = sinon.stub(User, "findById").resolves(user);
+    headsetOutStub = sinon.stub(Loan, "exists").resolves(null);
     deleteLoansStub = sinon.stub(Loan, "deleteMany").resolves();
   });
 
@@ -303,15 +325,17 @@ describe("UserAccountFacade deleteAccount Test", () => {
     const error = await attempt();
 
     expect(error).to.be.undefined;
-    expect(user.deleteOne.calledOnce).to.be.true;
+    expect(deleteLoansStub.called).to.be.false;
+    expect(user.deleteOne.called).to.be.true;
   });
 
   it("should return 404 when the user does not exist", async () => {
-    User.findById.resolves(null);
+    findByIdStub.resolves(null);
 
     const error = await attempt();
 
     expect(error.status).to.equal(404);
+    expect(deleteLoansStub.called).to.be.false;
     expect(user.deleteOne.called).to.be.false;
   });
 
@@ -326,13 +350,13 @@ describe("UserAccountFacade deleteAccount Test", () => {
   });
 
   it("should refuse with 409 while the student still has a headset out", async () => {
-    existsStub.resolves({ _id: new mongoose.Types.ObjectId() });
+    headsetOutStub.resolves({ _id: new mongoose.Types.ObjectId() });
 
     const error = await attempt();
 
     expect(error.status).to.equal(409);
     expect(
-      existsStub.calledOnceWith({ student: user._id, status: "Collected" }),
+      headsetOutStub.calledOnceWith({ student: user._id, status: "Collected" }),
     ).to.be.true;
     expect(deleteLoansStub.called).to.be.false;
     expect(user.deleteOne.called).to.be.false;
