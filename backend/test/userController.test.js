@@ -12,7 +12,7 @@ const UserAccountFacade = require("../utils/UserAccountFacade");
 const mongoose = require("mongoose");
 
 // GET USER
-describe("GetUsers Function Test", () => {
+describe("XRH-2 GetUsers Function Test", () => {
   let req, res, chain;
 
   const users = [
@@ -144,7 +144,7 @@ describe("GetUsers Function Test", () => {
 });
 
 // CREATE USER
-describe("CreateUser Function Test", () => {
+describe("XRH-9 CreateUser Function Test", () => {
   let req, res;
 
   beforeEach(() => {
@@ -230,7 +230,7 @@ describe("CreateUser Function Test", () => {
 });
 
 // DELETE USER
-describe("DeleteUser Function Test", () => {
+describe("XRH-16 DeleteUser Function Test", () => {
   let req, res;
 
   beforeEach(() => {
@@ -282,7 +282,7 @@ describe("DeleteUser Function Test", () => {
   });
 });
 
-describe("UserAccountFacade deleteAccount Test", () => {
+describe("XRH-16 UserAccountFacade deleteAccount Test", () => {
   const facade = new UserAccountFacade();
   const id = new mongoose.Types.ObjectId().toString();
   let user, headsetOutStub, deleteLoansStub;
