@@ -37,7 +37,7 @@ class UserAccountFacade {
 
   // delete any loans belonging to the deleted student account
   async #deleteLoans(user) {
-    await Loan.deleteMany({ student: user._id });
+    if (user.role === "student") await Loan.deleteMany({ student: user._id });
   }
 }
 

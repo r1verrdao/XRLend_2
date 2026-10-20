@@ -1,0 +1,134 @@
+name: XRLend MERN CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+  pull_request:
+    branches:
+      - dev
+      - main
+
+jobs:
+  # 1. CI STAGE: Automated Backend Testing & Code Validation
+  test-backend:
+    name: Backend Tests (Mocha/Chai)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+
+      - name: Install Backend Dependencies
+        run: npm install
+
+      - name: Execute Backend Tests
+        run: npm test
+
+  # 2. CI STAGE: Automated Frontend Production Build Check
+  build-frontend:
+    name: Frontend Build Check (React)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+
+      - name: Install Frontend Dependencies
+        run: npm install
+
+      - name: Build React Application
+        run: npm run build
+
+  # 3. CD STAGE: Continuous Deployment to AWS EC2 via Self-Hosted Runner
+  deploy-to-ec2:
+    name: Deploy to Production (EC2)
+    needs: [test-backend, build-frontend]
+    # Only deploy on direct push/merge to dev or main
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main')
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Latest Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js 20 on Runner
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+
+      # 3.1. Configure Environment Variables for Backend
+      - name: Configure Backend Secrets (.env)
+        run: |
+          cd backend
+          touch .env
+          echo "MONGO_URI=${{ secrets.MONGO_URI }}" > .env
+          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
+          echo "PORT=${{ secrets.PORT || '5001' }}" >> .env
+          echo "STAFF_CODE=${{ secrets.STAFF_CODE || '123456' }}" >> .env
+
+      # 3.2. Install Backend Dependencies
+      - name: Install Backend Dependencies
+        run: |
+          cd backend
+          npm install --production=false
+
+      # 3.3. Install & Build Frontend
+      - name: Build Frontend Production Bundle
+        run: |
+          cd frontend
+          npm install
+          rm -rf ./build
+          npm run build
+
+      # 3.4. Orchestrate Processes with PM2
+      - name: Manage PM2 Backend Process
+        run: |
+          cd backend
+          if pm2 show backend > /dev/null 2>&1; then
+            echo "Restarting existing backend process..."
+            pm2 restart backend --update-env
+          elif pm2 show xrlend-backend > /dev/null 2>&1; then
+            echo "Restarting existing xrlend-backend process..."
+            pm2 restart xrlend-backend --update-env
+          else
+            echo "Starting new backend process..."
+            pm2 start server.js --name "backend"
+          fi
+
+      - name: Manage PM2 Frontend Process
+        run: |
+          cd frontend
+          if pm2 show frontend > /dev/null 2>&1; then
+            echo "Restarting existing frontend process..."
+            pm2 restart frontend
+          elif pm2 show xrlend-frontend > /dev/null 2>&1; then
+            echo "Restarting existing xrlend-frontend process..."
+            pm2 restart xrlend-frontend
+          else
+            echo "Starting new frontend process with serve..."
+            which serve > /dev/null 2>&1 || sudo npm install -g serve
+            pm2 start "serve -s build -l 3000" --name "frontend"
+          fi
+
+      # 3.5. Save PM2 Configuration & Output Table for Submission
+      - name: Save PM2 State and Display Status
+        run: |
+          pm2 save
+          echo "=== PM2 STATUS TABLE FOR SUBMISSION EVIDENCE ==="
+          pm2 status

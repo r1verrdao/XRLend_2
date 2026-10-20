@@ -1,12 +1,22 @@
 import axios from 'axios';
 
+const getBaseURL = () => {
+  if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL;
+  if (process.env.NODE_ENV === 'development') return 'http://localhost:5001';
+  // If accessing directly on port 3000 (PM2 serve), route to backend port 5001
+  if (typeof window !== 'undefined' && window.location.port === '3000') {
+    return `http://${window.location.hostname}:5001`;
+  }
+  // Same address as the page also works through the load balancer
+  return '';
+};
+
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:5001', // local
-  // baseURL: 'http://16.176.15.125:5001', // public IP of cloud VPS, edit later when deploying
+  baseURL: getBaseURL(),
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Every protected route needs the token. Without this the server returns 401.
+// WO this the server returns 401.
 axiosInstance.interceptors.request.use((config) => {
   const stored = localStorage.getItem('xrlend-user');
   if (stored) {
