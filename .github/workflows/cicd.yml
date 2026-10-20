@@ -59,8 +59,8 @@ jobs:
   deploy-to-ec2:
     name: Deploy to Production (EC2)
     needs: [test-backend, build-frontend]
-    # Only deploy on direct push/merge to dev or main
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main')
+    # Only deploy to EC2 when changes are pushed or merged directly into the main (production) branch
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: self-hosted
 
     steps:
